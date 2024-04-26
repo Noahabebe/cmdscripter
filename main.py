@@ -1,11 +1,10 @@
 from flask import Flask, render_template, jsonify, request
-import spacy
 from fuzzywuzzy import fuzz
 import re
 
 
 app = Flask(__name__)
-nlp = spacy.load("en_core_web_sm")
+
 cmd_commands = {
   "Append": "The append command can be used by programs to open files in another directory as if they were located in the current directory. The append command is available in MS-DOS as well as in all 32-bit versions of Windows. The append command is not available in 64-bit versions of Windows.",
   "Arp": "The arp command is used to display or change entries in the ARP cache. The arp command is available in all versions of Windows.",
@@ -252,46 +251,29 @@ cmd_commands = {
 }
 
 
-
 @app.route('/', methods=['GET', 'POST'])
 def index():
- if request.method == 'POST':
-  user_description = request.form['description']
-  matching_command = find_command(user_description, 
-  cmd_commands.items())
-  print("Matching command:", matching_command)
-  return jsonify(matching_command)
- else:
-   return render_template('index.html')
-  
+    if request.method == 'POST':
+        user_description = request.form['description']
+        matching_command = find_command(user_description, cmd_commands.items())
+        print("Matching command:", matching_command)
+        return jsonify(matching_command)
+    else:
+        return render_template('index.html')
+
+
 def find_command(description, commands):
-  best_match = None
-  best_score = -1
+    best_match = None
+    best_score = -1
 
-  
-  doc = nlp(description)
+    for command, cmd_description in commands:
+        similarity_score_fuzzy = fuzz.partial_ratio(description.lower(), cmd_description.lower())
+        if similarity_score_fuzzy > best_score:
+            best_score = similarity_score_fuzzy
+            best_match = command
 
-  for command, cmd_description in commands:
-     
-      similarity_score_spacy = nlp(cmd_description).similarity(doc)
-
-      
-      similarity_score_fuzzy = fuzz.partial_ratio(description.lower(), cmd_description.lower())
-
-      
-      total_score = (similarity_score_spacy + similarity_score_fuzzy) / 2
-
-      
-      if total_score > best_score:
-          best_score = total_score
-          best_match = command
-
-  return best_match if best_score >= 70 else "No matching command found"
-
-
-
-
+    return best_match if best_score >= 70 else "No matching command found"
 
 
 if __name__ == '__main__':
-  app.run(host='0.0.0.0', port=80)
+    app.run(host='0.0.0.0', port=80)
