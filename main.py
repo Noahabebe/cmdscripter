@@ -1,9 +1,17 @@
 from flask import Flask, render_template, jsonify, request
-from fuzzywuzzy import fuzz
-import re
-
-
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
+from nltk.stem import WordNetLemmatizer
+from nltk.metrics import edit_distance
+import nltk
 app = Flask(__name__)
+
+nltk.download('stopwords')
+nltk.download('punkt')                                                                                                                                                              
+nltk.download('wordnet')
+stop_words = set(stopwords.words('english'))
+lemmatizer = WordNetLemmatizer()
+
 
 cmd_commands = {
   "Append": "The append command can be used by programs to open files in another directory as if they were located in the current directory. The append command is available in MS-DOS as well as in all 32-bit versions of Windows. The append command is not available in 64-bit versions of Windows.",
@@ -251,29 +259,40 @@ cmd_commands = {
 }
 
 
-@app.route('/', methods=['GET', 'POST'])
-def index():
-    if request.method == 'POST':
-        user_description = request.form['description']
-        matching_command = find_command(user_description, cmd_commands.items())
-        print("Matching command:", matching_command)
-        return jsonify(matching_command)
-    else:
-        return render_template('index.html')
+def preprocess_text(text):
+  tokens = word_tokenize(text.lower())
+  tokens = [lemmatizer.lemmatize(word) for word in tokens if word.isalnum() and word not in stop_words]
+  return tokens
 
+def calculate_similarity(description, cmd_description):
+  description_tokens = preprocess_text(description)
+  cmd_tokens = preprocess_text(cmd_description)
+  distance = edit_distance(description_tokens, cmd_tokens)
+  max_len = max(len(description_tokens), len(cmd_tokens))
+  similarity = 1 - (distance / max_len)
+  return similarity
 
 def find_command(description, commands):
-    best_match = None
-    best_score = -1
+  best_match = None
+  best_score = -1
 
-    for command, cmd_description in commands:
-        similarity_score_fuzzy = fuzz.partial_ratio(description.lower(), cmd_description.lower())
-        if similarity_score_fuzzy > best_score:
-            best_score = similarity_score_fuzzy
-            best_match = command
+  for command, cmd_description in commands.items():
+      similarity_score = calculate_similarity(description, cmd_description)
+      if similarity_score > best_score:
+          best_score = similarity_score
+          best_match = command
 
-    return best_match if best_score >= 70 else "No matching command found"
+  return best_match if best_score >= 0 else "No matching command found"
 
+@app.route('/', methods=['GET', 'POST'])
+def index():
+  if request.method == 'POST':
+      user_description = request.form['description']
+      matching_command = find_command(user_description, cmd_commands)
+      print("Matching command:", matching_command)
+      return jsonify(matching_command)
+  else:
+      return render_template('index.html')
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=80)
+  app.run(host='0.0.0.0', port=80)
